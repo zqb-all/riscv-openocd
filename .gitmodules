@@ -6,4 +6,4 @@
 	url = https://github.com/msteveb/jimtcl.git
 [submodule "src/jtag/drivers/libjaylink"]
 	path = src/jtag/drivers/libjaylink
-	url = https://gitlab.zapb.de/libjaylink/libjaylink.git
+	url = https://github.com/zqb-all/libjaylink.git
