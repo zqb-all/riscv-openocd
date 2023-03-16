@@ -58,4 +58,7 @@ unsigned int adapter_get_speed_khz(void);
 /** Retrieves the serial number set with command 'adapter serial' */
 const char *adapter_get_required_serial(void);
 
+/** Retrieves the index set with command 'adapter index' */
+const char *adapter_get_required_index(void);
+
 #endif /* OPENOCD_JTAG_ADAPTER_H */

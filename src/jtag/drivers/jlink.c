@@ -53,6 +53,7 @@ static uint8_t caps[JAYLINK_DEV_EXT_CAPS_SIZE];
 
 static uint32_t serial_number;
 static bool use_serial_number;
+static bool use_index;
 static bool use_usb_location;
 static enum jaylink_usb_address usb_address;
 static bool use_usb_address;
@@ -573,7 +574,7 @@ static int jlink_open_device(uint32_t ifaces, bool *found_device)
 
 	use_usb_location = !!adapter_usb_get_location();
 
-	if (!use_serial_number && !use_usb_address && !use_usb_location && num_devices > 1) {
+	if (!use_serial_number && !use_usb_address && !use_usb_location && !use_index && num_devices > 1) {
 		LOG_ERROR("Multiple devices found, specify the desired device");
 		jaylink_free_devices(devs, true);
 		jaylink_exit(jayctx);
@@ -582,8 +583,14 @@ static int jlink_open_device(uint32_t ifaces, bool *found_device)
 
 	*found_device = false;
 
-	for (size_t i = 0; devs[i]; i++) {
+	int index = adapter_get_required_index();
+	size_t i;
+	for (i = 0; devs[i]; i++) {
 		struct jaylink_device *dev = devs[i];
+		if (use_index) {
+			if (index - 1 != i)
+				continue;
+		}
 
 		if (use_serial_number) {
 			uint32_t tmp;
@@ -628,6 +635,10 @@ static int jlink_open_device(uint32_t ifaces, bool *found_device)
 		}
 
 		LOG_ERROR("Failed to open device: %s", jaylink_strerror(ret));
+	}
+	if (use_index) {
+		if (index >= i)
+			LOG_ERROR("Failed to find index %d, now only %d devices", index - 1, i);
 	}
 
 	jaylink_free_devices(devs, true);
@@ -682,6 +693,15 @@ static int jlink_init(void)
 		}
 		use_serial_number = true;
 		use_usb_address = false;
+	}
+
+	int index = adapter_get_required_index();
+	if (index - 1 >= 0) {
+		use_index = true;
+		use_serial_number = false;
+		use_usb_address = false;
+	} else {
+		use_index = false;
 	}
 
 	bool found_device;

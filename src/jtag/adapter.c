@@ -42,6 +42,7 @@ static struct {
 	enum adapter_clk_mode clock_mode;
 	int speed_khz;
 	int rclk_fallback_speed_khz;
+	int index;
 } adapter_config;
 
 bool is_adapter_initialized(void)
@@ -224,6 +225,11 @@ int adapter_get_speed_readable(int *khz)
 const char *adapter_get_required_serial(void)
 {
 	return adapter_config.serial;
+}
+
+const char *adapter_get_required_index(void)
+{
+	return adapter_config.index;
 }
 
 /*
@@ -672,6 +678,16 @@ COMMAND_HANDLER(handle_adapter_serial_command)
 	return ERROR_OK;
 }
 
+COMMAND_HANDLER(handle_adapter_index_command)
+{
+	if (CMD_ARGC != 1)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	adapter_config.index = strtoul(CMD_ARGV[0], NULL, 10) + 1;
+	command_print(CMD, "adapter index: %d\n", adapter_config.index - 1);
+	return ERROR_OK;
+}
+
 COMMAND_HANDLER(handle_adapter_reset_de_assert)
 {
 	enum values {
@@ -825,6 +841,13 @@ static const struct command_registration adapter_command_handlers[] = {
 		.mode = COMMAND_CONFIG,
 		.help = "Set the serial number of the adapter",
 		.usage = "serial_string",
+	},
+	{
+		.name = "index",
+		.handler = handle_adapter_index_command,
+		.mode = COMMAND_CONFIG,
+		.help = "Set the index number of the adapter",
+		.usage = "[0-n]",
 	},
 	{
 		.name = "list",
