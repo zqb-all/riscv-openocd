@@ -1519,7 +1519,7 @@ static int set_group(struct target *target, bool *supported, unsigned group, gro
 	return ERROR_OK;
 }
 
-static int examine(struct target *target)
+static int _examine(struct target *target)
 {
 	/* Don't need to select dbus, since the first thing we do is read dtmcontrol. */
 
@@ -1784,6 +1784,23 @@ static int examine(struct target *target)
 			riscv_count_harts(target));
 	LOG_TARGET_INFO(target, " XLEN=%d, misa=0x%" PRIx64, r->xlen, r->misa);
 	return ERROR_OK;
+}
+
+static int examine(struct target *target)
+{
+	int retry_cnt = 0;
+	int ret = _examine(target);
+
+	while (ret != ERROR_OK && retry_cnt < riscv_examine_retry_cnt) {
+		dm013_info_t *dm = get_dm(target);
+		if (!dm)
+			return ERROR_FAIL;
+		dm->was_reset = 0;
+		retry_cnt++;
+		LOG_INFO("%s retry %d", __func__, retry_cnt);
+		ret = _examine(target);
+	}
+	return ret;
 }
 
 static int riscv013_authdata_read(struct target *target, uint32_t *value, unsigned int index)

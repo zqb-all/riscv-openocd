@@ -302,6 +302,8 @@ extern int riscv_command_timeout_sec;
 /* Wall-clock timeout after reset. Settable via RISC-V Target commands.*/
 extern int riscv_reset_timeout_sec;
 
+extern int riscv_examine_retry_cnt;
+
 extern bool riscv_enable_virtual;
 extern bool riscv_ebreakm;
 extern bool riscv_ebreaks;

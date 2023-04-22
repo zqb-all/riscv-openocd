@@ -134,6 +134,8 @@ int riscv_command_timeout_sec = DEFAULT_COMMAND_TIMEOUT_SEC;
 /* Wall-clock timeout after reset. Settable via RISC-V Target commands.*/
 int riscv_reset_timeout_sec = DEFAULT_RESET_TIMEOUT_SEC;
 
+int riscv_examine_retry_cnt;
+
 static bool riscv_enable_virt2phys = true;
 bool riscv_ebreakm = true;
 bool riscv_ebreaks = true;
@@ -2773,6 +2775,23 @@ COMMAND_HANDLER(riscv_set_command_timeout_sec)
 	return ERROR_OK;
 }
 
+COMMAND_HANDLER(riscv_set_examine_retry_cnt)
+{
+	if (CMD_ARGC != 1) {
+		LOG_ERROR("Command takes exactly 1 parameter");
+		return ERROR_COMMAND_SYNTAX_ERROR;
+	}
+	int retry_cnt = atoi(CMD_ARGV[0]);
+	if (retry_cnt < 0) {
+		LOG_ERROR("%s is not a valid integer argument for command.", CMD_ARGV[0]);
+		return ERROR_FAIL;
+	}
+
+	riscv_examine_retry_cnt = retry_cnt;
+
+	return ERROR_OK;
+}
+
 COMMAND_HANDLER(riscv_set_reset_timeout_sec)
 {
 	if (CMD_ARGC != 1) {
@@ -3870,6 +3889,13 @@ static const struct command_registration riscv_exec_command_handlers[] = {
 		.mode = COMMAND_ANY,
 		.usage = "[sec]",
 		.help = "Set the wall-clock timeout (in seconds) after reset is deasserted"
+	},
+	{
+		.name = "set_examine_retry_cnt",
+		.handler = riscv_set_examine_retry_cnt,
+		.mode = COMMAND_ANY,
+		.usage = "[cnt]",
+		.help = "Set the retry cnt for examine"
 	},
 	{
 		.name = "set_prefer_sba",
