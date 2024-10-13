@@ -3061,19 +3061,13 @@ static int riscv_virt2phys(struct target *target, target_addr_t virtual, target_
 			virtual, physical);
 }
 
-static int check_access_request(struct target *target, target_addr_t address,
+static int check_virt_memory_access(struct target *target, target_addr_t address,
 			uint32_t size, uint32_t count)
 {
 	bool crosses_page_boundary = RISCV_PGBASE(address + size * count - 1) != RISCV_PGBASE(address);
 	if (address % size && crosses_page_boundary) {
-		int mmu_enabled;
-		int result = riscv_mmu(target, &mmu_enabled);
-		if (result != ERROR_OK)
-			return result;
-		if (mmu_enabled) {
-			LOG_TARGET_ERROR(target, "Accessing an element across a page boundary is not supported.");
-			return ERROR_FAIL;
-		}
+		LOG_TARGET_ERROR(target, "Accessing an element across a page boundary is not supported.");
+		return ERROR_FAIL;
 	}
 	return ERROR_OK;
 }
@@ -3093,11 +3087,20 @@ static int riscv_read_memory(struct target *target, target_addr_t address,
 		return ERROR_OK;
 	}
 
-	int result = check_access_request(target, address, size, count);
+	int mmu_enabled;
+	int result = riscv_mmu(target, &mmu_enabled);
 	if (result != ERROR_OK)
 		return result;
 
 	RISCV_INFO(r);
+
+	if (!mmu_enabled)
+		return r->read_memory(target, address, size, count, buffer, size);
+
+	result = check_virt_memory_access(target, address, size, count);
+	if (result != ERROR_OK)
+		return result;
+
 	uint32_t current_count = 0;
 	while (current_count < count) {
 		target_addr_t physical_addr;
@@ -3135,13 +3138,21 @@ static int riscv_write_memory(struct target *target, target_addr_t address,
 		return ERROR_OK;
 	}
 
-	int result = check_access_request(target, address, size, count);
+	int mmu_enabled;
+	int result = riscv_mmu(target, &mmu_enabled);
 	if (result != ERROR_OK)
 		return result;
 
 	struct target_type *tt = get_target_type(target);
 	if (!tt)
 		return ERROR_FAIL;
+
+	if (!mmu_enabled)
+		return tt->write_memory(target, address, size, count, buffer);
+
+	result = check_virt_memory_access(target, address, size, count);
+	if (result != ERROR_OK)
+		return result;
 
 	uint32_t current_count = 0;
 	while (current_count < count) {
