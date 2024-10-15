@@ -3079,48 +3079,6 @@ static int riscv_read_phys_memory(struct target *target, target_addr_t phys_addr
 	return r->read_memory(target, phys_address, size, count, buffer, size);
 }
 
-static int riscv_read_memory(struct target *target, target_addr_t address,
-		uint32_t size, uint32_t count, uint8_t *buffer)
-{
-	if (count == 0) {
-		LOG_TARGET_WARNING(target, "0-length read from 0x%" TARGET_PRIxADDR, address);
-		return ERROR_OK;
-	}
-
-	int mmu_enabled;
-	int result = riscv_mmu(target, &mmu_enabled);
-	if (result != ERROR_OK)
-		return result;
-
-	RISCV_INFO(r);
-
-	if (!mmu_enabled)
-		return r->read_memory(target, address, size, count, buffer, size);
-
-	result = check_virt_memory_access(target, address, size, count);
-	if (result != ERROR_OK)
-		return result;
-
-	uint32_t current_count = 0;
-	while (current_count < count) {
-		target_addr_t physical_addr;
-		result = target->type->virt2phys(target, address, &physical_addr);
-		if (result != ERROR_OK) {
-			LOG_TARGET_ERROR(target, "Address translation failed.");
-			return result;
-		}
-
-		uint32_t chunk_count = MIN(count - current_count, (RISCV_PGSIZE - RISCV_PGOFFSET(address)) / size);
-		result = r->read_memory(target, physical_addr, size, chunk_count, buffer + current_count * size, size);
-		if (result != ERROR_OK)
-			return result;
-
-		current_count += chunk_count;
-		address += chunk_count * size;
-	}
-	return ERROR_OK;
-}
-
 static int riscv_write_phys_memory(struct target *target, target_addr_t phys_address,
 			uint32_t size, uint32_t count, const uint8_t *buffer)
 {
@@ -3130,11 +3088,18 @@ static int riscv_write_phys_memory(struct target *target, target_addr_t phys_add
 	return tt->write_memory(target, phys_address, size, count, buffer);
 }
 
-static int riscv_write_memory(struct target *target, target_addr_t address,
-		uint32_t size, uint32_t count, const uint8_t *buffer)
+static int riscv_rw_memory(struct target *target, target_addr_t address, uint32_t size,
+		uint32_t count, uint8_t *read_buffer, const uint8_t *write_buffer)
 {
+	if (read_buffer && write_buffer) {
+		LOG_TARGET_ERROR(target, "Can't handle both read and write buffer.");
+		return ERROR_FAIL;
+	}
+
+	bool is_write = write_buffer ? true : false;
 	if (count == 0) {
-		LOG_TARGET_WARNING(target, "0-length write to 0x%" TARGET_PRIxADDR, address);
+		LOG_TARGET_WARNING(target, "0-length %s 0x%" TARGET_PRIxADDR,
+				is_write ? "write to" : "read from", address);
 		return ERROR_OK;
 	}
 
@@ -3143,12 +3108,18 @@ static int riscv_write_memory(struct target *target, target_addr_t address,
 	if (result != ERROR_OK)
 		return result;
 
+	RISCV_INFO(r);
 	struct target_type *tt = get_target_type(target);
 	if (!tt)
 		return ERROR_FAIL;
 
-	if (!mmu_enabled)
-		return tt->write_memory(target, address, size, count, buffer);
+
+	if (!mmu_enabled) {
+		if (is_write)
+			return tt->write_memory(target, address, size, count, write_buffer);
+		else
+			return r->read_memory(target, address, size, count, read_buffer, size);
+	}
 
 	result = check_virt_memory_access(target, address, size, count);
 	if (result != ERROR_OK)
@@ -3164,7 +3135,10 @@ static int riscv_write_memory(struct target *target, target_addr_t address,
 		}
 
 		uint32_t chunk_count = MIN(count - current_count, (RISCV_PGSIZE - RISCV_PGOFFSET(address)) / size);
-		result = tt->write_memory(target, physical_addr, size, chunk_count, buffer + current_count * size);
+		if (is_write)
+			result = tt->write_memory(target, physical_addr, size, chunk_count, write_buffer + current_count * size);
+		else
+			result = r->read_memory(target, physical_addr, size, chunk_count, read_buffer + current_count * size, size);
 		if (result != ERROR_OK)
 			return result;
 
@@ -3172,6 +3146,18 @@ static int riscv_write_memory(struct target *target, target_addr_t address,
 		address += chunk_count * size;
 	}
 	return ERROR_OK;
+}
+
+static int riscv_read_memory(struct target *target, target_addr_t address,
+		uint32_t size, uint32_t count, uint8_t *buffer)
+{
+	return riscv_rw_memory(target, address, size, count, buffer, NULL);
+}
+
+static int riscv_write_memory(struct target *target, target_addr_t address,
+		uint32_t size, uint32_t count, const uint8_t *buffer)
+{
+	return riscv_rw_memory(target, address, size, count, NULL, buffer);
 }
 
 static const char *riscv_get_gdb_arch(const struct target *target)
